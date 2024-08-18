@@ -19,18 +19,6 @@ protocol ASTNode {
     func toString() -> String
 }
 
-protocol ASTValueNode: ASTNode {
-    var value: any ASTValueNode {get set}
-}
-
-func add_tabs(to s: String) -> String {
-    var out = ""
-    for line in s.lines {
-        out += "\t" + line
-    }
-    return out
-}
-
 struct ASTProgram: ASTNode {
     var function: ASTFunction
     func toString() -> String {
@@ -64,28 +52,35 @@ struct ASTFunction: ASTNode {
 }
 
 struct ASTStatement: ASTNode {
-    var exp: ASTNode
+    var exp: ASTExp
     func toString() -> String {
         return "Statement(\n\texp=\(exp.toString())\n)"
     }
     
     func toAsm() -> [AsmInstr] {
-        var expn = exp
-        while (type(of: expn) is ASTInt) {
-            expn = expn.value
+        if exp.int != nil {
+            return [Mov(src: Imm(int: Int(exp.int!.value.lexeme)!), dest: Register()), Ret()]
+        } else {
+            return []
         }
-        return [Mov(src: Imm(int: Int(expn.value.value.lexeme)!), dest: Register()), Ret()]
     }
     
 }
 
-struct ASTExp: ASTValueNode {
-    var value: ASTValueNode
+struct ASTExp: ASTNode {
+    var int: ASTInt?
+    var unop:ASTUnary?
     func toString() -> String {
-        return "Exp(\n\t\(value.toString())\n)"
+        if int != nil {
+            return "Exp(\(int!.toString())"
+        } else if unop != nil {
+            return "Exp(\(unop!.toString()))"
+        } else {
+            return "EXP(nil?!?!?!?)"
+        }
     }
 }
-
+    
 struct ASTUnary: ASTNode {
     var op: Token
     var right: ASTNode
@@ -101,7 +96,7 @@ struct ASTIdentifier: ASTNode {
     }
 }
 
-struct ASTInt: ASTValueNode {
+struct ASTInt: ASTNode {
     var value: Token
     func toString() -> String {
         return "Int(\(value))"
@@ -184,16 +179,16 @@ class Parser {
         throw ParsingError.unexpectedToken(found: tokens[current], expected: "return keyword to start Statement")
     }
     
-    func parseExp() throws -> ASTNode {
+    func parseExp() throws -> ASTExp {
         // <int> | <unop> <exp> | ( <exp> )
         if tokens[current].type == .Constant {
             current += 1
-            return ASTExp(value: ASTInt(value: tokens[current-1]))
+            return ASTExp(int: ASTInt(value: tokens[current-1]))
         } else if tokens[current].type == .BitwiseComplement || tokens[current].type == .Negation {
             let op: Token = tokens[current]
             current += 1
-            var rt = try! parseExp()
-            return ASTUnary(op: op, right: rt)
+            let rt = try! parseExp()
+            return ASTExp(unop: ASTUnary(op: op, right: rt))
         } else if tokens[current].type == .OpenParen {
             current += 1
             let inner_exp = try! parseExp()

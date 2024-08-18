@@ -25,7 +25,6 @@ extension String {
     }
 }
 
-let keywords = Set(["int", "return", "void"])
 let id_chars = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_")
 
 enum TokenType {
@@ -43,6 +42,8 @@ enum TokenType {
     case Negation
     case Decrement
 }
+
+let keywords = ["int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid]
 
 struct Token {
     var type: TokenType
@@ -184,7 +185,11 @@ func tokenizeRegex(input: String) throws -> [Token] {
         if longest == "" {
             throw LexerError.unidentifiedToken(found: input.substring(from: i, to: input.count))
         }
-        output.append(Token(type: longest_type!, lexeme: longest))
+        if keywords.keys.contains(longest){
+            output.append(Token(type: keywords[longest]!, lexeme: longest))
+        } else {
+            output.append(Token(type: longest_type!, lexeme: longest))
+        }
         print("Found token \(longest)")
         i += longest.count
     }
