@@ -52,6 +52,15 @@ struct ASMMovInstr: ASMInstruction {
     }
 }
 
+struct ASMMovBInstr: ASMInstruction {
+    var src: ASMOperand
+    var dst: ASMOperand
+    func emitCode() -> String {
+        return "movb" + "\t" + src.emitCode() + ", \t" + dst.emitCode()
+    }
+}
+
+
 struct ASMUnaryInstr: ASMInstruction {
     var op: String
     var operand: ASMOperand
@@ -83,7 +92,7 @@ struct ASMBinaryInstruction: ASMInstruction {
     var src: ASMOperand
     var dst: ASMOperand
     var op: String
-    let op_map = ["+": "addl", "-": "subl", "*": "imull"]
+    let op_map = ["+": "addl", "-": "subl", "*": "imull", "&": "andl", "|": "orl ", "^": "xorl", "<<": "sall", ">>": "sarl"]
     func emitCode() -> String {
         let s = src.emitCode()
         let d = dst.emitCode()
@@ -117,7 +126,7 @@ struct ASMImm: ASMOperand {
 
 struct ASMReg: ASMOperand {
     var register: String
-    let reg_codes = ["AX": "%eax", "r10d": "%r10d", "DX": "%edx", "r11d" : "%r10d"]
+    let reg_codes = ["AX": "%eax", "r10d": "%r10d", "DX": "%edx", "CL": "%cl", "r11d" : "%r10d"]
     func emitCode() -> String {
         return reg_codes[register]!
     }
@@ -166,7 +175,7 @@ func convertInstruction(tac: TACInstruction) throws -> [ASMInstruction] {
         let src1 = try! convertValue(tac: tac_b.src1)
         let src2 = try! convertValue(tac: tac_b.src2)
         let dst = try! convertValue(tac: tac_b.dst)
-        if tac_b.op == "+" || tac_b.op == "-" || tac_b.op == "*" {
+        if tac_b.op == "+" || tac_b.op == "-" || tac_b.op == "*" || tac_b.op == "&" || tac_b.op == "|" || tac_b.op == "^" || tac_b.op == "<<" || tac_b.op == ">>" {
             return [ASMMovInstr(src: src1, dst: dst), ASMBinaryInstruction(src: src2, dst: dst, op: tac_b.op)]
         } else if tac_b.op == "/"{
             return [
@@ -325,13 +334,19 @@ func fixInvalidInstructions(instructions: [ASMInstruction]) -> [ASMInstruction] 
             }
         case is ASMBinaryInstruction:
             let bn = instr as! ASMBinaryInstruction
-            if bn.op == "+" || bn.op == "-" {
+            if bn.op == "+" || bn.op == "-" || bn.op == "&" || bn.op == "|" || bn.op == "^" {
                 if bn.dst is ASMStack && bn.src is ASMStack {
                     new_instr.append(ASMMovInstr(src: bn.src, dst: ASMReg(register: "r10d")))
                     new_instr.append(ASMBinaryInstruction(src: ASMReg(register: "r10d"), dst: bn.dst, op: bn.op))
                 } else {
                     new_instr.append(instr)
                 }
+            } else if bn.op == ">>" || bn.op == "<<" {
+                // src >> dst means shift src by d bits
+                new_instr.append(ASMMovInstr(src: bn.dst, dst: ASMReg(register: "r10d")))
+                new_instr.append(ASMMovBInstr(src: bn.src, dst: ASMReg(register: "CL")))
+                new_instr.append(ASMBinaryInstruction(src: ASMReg(register: "CL"), dst: ASMReg(register: "r10d"), op: bn.op))
+                new_instr.append(ASMMovInstr(src: ASMReg(register: "r10d"), dst: bn.dst))
             } else if bn.op == "*" {
                 new_instr.append(ASMMovInstr(src: bn.dst, dst: ASMReg(register: "r11d")))
                 new_instr.append(ASMBinaryInstruction(src: bn.src, dst: ASMReg(register: "r11d"), op: "*"))

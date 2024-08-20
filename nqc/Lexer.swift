@@ -45,6 +45,11 @@ enum TokenType {
     case Star
     case Slash
     case Percent
+    case BitwiseAnd
+    case BitwiseOr
+    case BitwiseXOr
+    case LeftShift
+    case RightShift
 }
 
 let keywords = ["int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid]
@@ -154,6 +159,10 @@ let regexMap = [
     TokenType.Star: /^\*/,
     TokenType.Slash: /^\//,
     TokenType.Percent: /^%/,
+    TokenType.BitwiseOr: /^\|/,
+    TokenType.BitwiseXOr: /^\^/,
+    TokenType.LeftShift: /^<</,
+    TokenType.RightShift: /^>>/,
     TokenType.Identifier: /^[a-zA-Z_]\w*\b/,
 ]
 
@@ -179,6 +188,10 @@ func tokenizeRegex(input: String) throws -> [Token] {
             continue
         } else if input[cur] == "+" {
             output.append(Token(type: .Plus, lexeme: "+"))
+            i += 1
+            continue
+        } else if input[cur] == "&" && input.getChar(at: i+1) != "&" {
+            output.append(Token(type: .BitwiseAnd, lexeme: "&"))
             i += 1
             continue
         }

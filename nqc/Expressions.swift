@@ -100,7 +100,7 @@ struct ASTBinaryExpr: ASTExpr {
     }
 }*/
 
-let PRECEDENCE_ORDER = ["*": 50, "/": 50, "%": 50, "+": 45, "-": 45]
+let PRECEDENCE_ORDER = ["*": 500, "/": 500, "%": 500, "+": 450, "-": 450, ">>": 400, "<<": 400, "&": 350, "^": 325, "|": 300]
 
 // ----- NOW PARSE
 

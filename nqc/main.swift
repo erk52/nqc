@@ -42,10 +42,11 @@ func main() {
         shell("gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     } else {
-        program = readFile(path: "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_3/valid/associativity.c")
-        filename = "test.c"
+        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_3/valid/extra_credit/bitwise_precedence.c"
+        shell("gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
+        program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     }
-    //print(program)
+    print(program)
     //print("=====")
     let reg = try! tokenizeRegex(input: program)
     
@@ -54,9 +55,12 @@ func main() {
     print(ast.toString())
     var tachometer = TACEmitter()
     let tac = tachometer.convertAST(program: ast)
+    for ln in tac.function.body {
+        print(ln)
+    }
     let asem = emitAssembly(program: tac)
 
-    //print(asem.emitCode())
+    print(asem.emitCode())
     let final = asem.emitCode()
     let assembly_file = filename.replacingOccurrences(of: ".c", with: ".s")
     let exec_file = filename.replacingOccurrences(of: ".c", with: "")
