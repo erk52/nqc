@@ -22,84 +22,46 @@ protocol ASTNode {
 struct ASTProgram: ASTNode {
     var function: ASTFunction
     func toString() -> String {
-        var out = "Program (\n"
-        for line in function.toString().lines {
-            out += "\t" + line
-        }
-        out += ")"
-        return out
-    }
-    
-    func toAsm() -> AsmProgram {
-        return AsmProgram(function_definition: function.toAsm())
+        return "Program(function=\(function.toString())"
     }
 }
 
 struct ASTFunction: ASTNode {
-    var name: ASTIdentifier
+    var name: String
     var body: ASTStatement
     func toString() -> String {
-        var out = "Function(\n"
-        out += "\tname=\(name.toString())\n"
-        out += "\tbody=\n\(body.toString())\n"
-        out += ")"
-        return out
-    }
-    
-    func toAsm() -> AsmFunction {
-        return AsmFunction(name: name, instructions: body.toAsm())
+        return "Function(name=\(name), body=\(body.toString()))"
     }
 }
 
-struct ASTStatement: ASTNode {
-    var exp: ASTExp
-    func toString() -> String {
-        return "Statement(\n\texp=\(exp.toString())\n)"
-    }
-    
-    func toAsm() -> [AsmInstr] {
-        if exp.int != nil {
-            return [Mov(src: Imm(int: Int(exp.int!.value.lexeme)!), dest: Register()), Ret()]
-        } else {
-            return []
-        }
-    }
+protocol ASTStatement: ASTNode {
     
 }
 
-struct ASTExp: ASTNode {
-    var int: ASTInt?
-    var unop:ASTUnary?
+struct ASTReturnStatement: ASTStatement {
+    var exp: ASTExpr
     func toString() -> String {
-        if int != nil {
-            return "Exp(\(int!.toString())"
-        } else if unop != nil {
-            return "Exp(\(unop!.toString()))"
-        } else {
-            return "EXP(nil?!?!?!?)"
-        }
+        return "Return(\(exp.toString()))"
     }
 }
+
+protocol ASTExpr: ASTNode {
     
-struct ASTUnary: ASTNode {
-    var op: Token
-    var right: ASTNode
+}
+
+struct ASTConstantExpr: ASTExpr {
+    var value: Int
     func toString() -> String {
-        return "Unary(\n\toperator=\(op.lexeme)\n\tright=\(right.toString())\n)"
+        return "Constant(\(value))"
     }
 }
 
-struct ASTIdentifier: ASTNode {
-    var identifier: Token
+struct ASTUnaryExpr: ASTExpr {
+    var op: String
+    var right: ASTExpr
+    
     func toString() -> String {
-        return "Identifier(\(identifier.lexeme))"
-    }
-}
-
-struct ASTInt: ASTNode {
-    var value: Token
-    func toString() -> String {
-        return "Int(\(value))"
+        return "Unary(\(op), \(right.toString())"
     }
 }
 
@@ -115,12 +77,17 @@ class Parser {
     }
 
     func parse() throws -> ASTProgram {
-        return ASTProgram(function: try! parseFunction())
+        
+        let p = ASTProgram(function: try! parseFunction())
+        if current < tokens.count {
+            throw ParsingError.unexpectedToken(found: tokens[current], expected: "EOF")
+        }
+        return p
     }
     
     func parseFunction() throws -> ASTFunction {
         // Expect "int <identifier> ( void ) { <stmt> }
-        var name: ASTIdentifier
+        var name: String
         var body: ASTStatement
         if tokens[current].type == .KeywordInt{
             current += 1
@@ -128,7 +95,7 @@ class Parser {
             throw ParsingError.unexpectedToken(found: tokens[current], expected: "int keyword at function start")
         }
         if tokens[current].type == .Identifier {
-            name = ASTIdentifier(identifier: tokens[current])
+            name = tokens[current].lexeme
             current += 1
         } else {
             throw ParsingError.unexpectedToken(found: tokens[current], expected: "Identifier for function name")
@@ -168,7 +135,7 @@ class Parser {
         // Expect 'return' token
         if tokens[current].type == TokenType.KeywordReturn {
             current += 1
-            let stmt = ASTStatement(exp: try! parseExp())
+            let stmt = ASTReturnStatement(exp: try! parseExp())
             if tokens[current].type == TokenType.Semicolon {
                 current += 1
                 return stmt
@@ -179,16 +146,16 @@ class Parser {
         throw ParsingError.unexpectedToken(found: tokens[current], expected: "return keyword to start Statement")
     }
     
-    func parseExp() throws -> ASTExp {
+    func parseExp() throws -> ASTExpr {
         // <int> | <unop> <exp> | ( <exp> )
         if tokens[current].type == .Constant {
             current += 1
-            return ASTExp(int: ASTInt(value: tokens[current-1]))
+            return ASTConstantExpr(value: Int(tokens[current-1].lexeme)!)
         } else if tokens[current].type == .BitwiseComplement || tokens[current].type == .Negation {
             let op: Token = tokens[current]
             current += 1
             let rt = try! parseExp()
-            return ASTExp(unop: ASTUnary(op: op, right: rt))
+            return ASTUnaryExpr(op: op.lexeme, right: rt)
         } else if tokens[current].type == .OpenParen {
             current += 1
             let inner_exp = try! parseExp()
@@ -202,11 +169,11 @@ class Parser {
         }
     }
     
-    func parseIdentifier() throws -> ASTIdentifier {
+    func parseIdentifier() throws -> String {
         // Expect identifier
         if tokens[current].type == .Identifier {
             current += 1
-            return ASTIdentifier(identifier: tokens[current - 1])
+            return tokens[current - 1].lexeme
         } else {
             throw ParsingError.unexpectedToken(found: tokens[current], expected: "Identifier token")
         }

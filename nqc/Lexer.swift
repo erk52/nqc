@@ -190,7 +190,6 @@ func tokenizeRegex(input: String) throws -> [Token] {
         } else {
             output.append(Token(type: longest_type!, lexeme: longest))
         }
-        print("Found token \(longest)")
         i += longest.count
     }
     return output
