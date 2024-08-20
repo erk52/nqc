@@ -41,6 +41,10 @@ enum TokenType {
     case BitwiseComplement
     case Negation
     case Decrement
+    case Plus
+    case Star
+    case Slash
+    case Percent
 }
 
 let keywords = ["int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid]
@@ -146,6 +150,10 @@ let regexMap = [
     TokenType.BitwiseComplement: /^~/,
     TokenType.Negation: /^-/,
     TokenType.Decrement: /^--/,
+    TokenType.Plus: /^\+/,
+    TokenType.Star: /^\*/,
+    TokenType.Slash: /^\//,
+    TokenType.Percent: /^%/,
     TokenType.Identifier: /^[a-zA-Z_]\w*\b/,
 ]
 
@@ -168,6 +176,10 @@ func tokenizeRegex(input: String) throws -> [Token] {
                 i += 1
             }
             i += 2
+            continue
+        } else if input[cur] == "+" {
+            output.append(Token(type: .Plus, lexeme: "+"))
+            i += 1
             continue
         }
         var longest = ""

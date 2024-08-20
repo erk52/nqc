@@ -45,18 +45,36 @@ struct ASTReturnStatement: ASTStatement {
     }
 }
 
-protocol ASTExpr: ASTNode {
+protocol ASTExpr: ASTNode {}
+
+struct ASTBinaryExpr: ASTExpr {
+    var left: ASTExpr
+    var right: ASTExpr
+    var op: String
+    func toString() -> String {
+        return "Binary(\(left.toString()), \(op), \(right.toString()))"
+    }
+}
+/*
+struct ASTFactorExpr: ASTExpr {
+    var factor: ASTFactor
+    func toString() -> String {
+        return "Expr(\(factor.toString())"
+    }
+}*/
+
+protocol ASTFactor: ASTNode {
     
 }
 
-struct ASTConstantExpr: ASTExpr {
+struct ASTConstantFactor: ASTExpr {
     var value: Int
     func toString() -> String {
         return "Constant(\(value))"
     }
 }
 
-struct ASTUnaryExpr: ASTExpr {
+struct ASTUnaryFactor: ASTExpr {
     var op: String
     var right: ASTExpr
     
@@ -64,7 +82,25 @@ struct ASTUnaryExpr: ASTExpr {
         return "Unary(\(op), \(right.toString())"
     }
 }
+/*
+struct ASTExprFactor: ASTExpr {
+    var expr: ASTExpr
+    func toString() -> String {
+        return "Factor(\(expr.toString()))"
+    }
+}*/
+/*
+struct ASTBinaryExpr: ASTExpr {
+    var op: String
+    var left: ASTFactor
+    var right: ASTFactor
+    
+    func toString() -> String {
+        return "Binary(\(left.toString()), \(op), \(right.toString()))"
+    }
+}*/
 
+let PRECEDENCE_ORDER = ["*": 50, "/": 50, "%": 50, "+": 45, "-": 45]
 
 // ----- NOW PARSE
 
@@ -87,6 +123,7 @@ class Parser {
     
     func parseFunction() throws -> ASTFunction {
         // Expect "int <identifier> ( void ) { <stmt> }
+        print("Parse function")
         var name: String
         var body: ASTStatement
         if tokens[current].type == .KeywordInt{
@@ -135,7 +172,7 @@ class Parser {
         // Expect 'return' token
         if tokens[current].type == TokenType.KeywordReturn {
             current += 1
-            let stmt = ASTReturnStatement(exp: try! parseExp())
+            let stmt = ASTReturnStatement(exp: try! parseExpr(precedence: 0))
             if tokens[current].type == TokenType.Semicolon {
                 current += 1
                 return stmt
@@ -146,19 +183,31 @@ class Parser {
         throw ParsingError.unexpectedToken(found: tokens[current], expected: "return keyword to start Statement")
     }
     
-    func parseExp() throws -> ASTExpr {
-        // <int> | <unop> <exp> | ( <exp> )
+    func parseExpr(precedence: Int) throws -> ASTExpr {
+        // <exp> ::= <factor> | <exp> <binop> <exp>
+        var left = try! parseFactor()
+        while PRECEDENCE_ORDER[tokens[current].lexeme] != nil && PRECEDENCE_ORDER[tokens[current].lexeme]! >= precedence  {
+            let op = tokens[current].lexeme
+            current += 1
+            let right = try! parseExpr(precedence: PRECEDENCE_ORDER[op]! + 1)
+            left = ASTBinaryExpr(left: left, right:right, op: op)
+        }
+        return left
+    }
+    
+    func parseFactor() throws -> ASTExpr {
+        // <factor> ::= <int> | <unop> <factor> | "(" <exp> ")
         if tokens[current].type == .Constant {
             current += 1
-            return ASTConstantExpr(value: Int(tokens[current-1].lexeme)!)
+            return ASTConstantFactor(value: Int(tokens[current-1].lexeme)!)
         } else if tokens[current].type == .BitwiseComplement || tokens[current].type == .Negation {
             let op: Token = tokens[current]
             current += 1
-            let rt = try! parseExp()
-            return ASTUnaryExpr(op: op.lexeme, right: rt)
+            let rt = try! parseFactor()
+            return ASTUnaryFactor(op: op.lexeme, right: rt)
         } else if tokens[current].type == .OpenParen {
             current += 1
-            let inner_exp = try! parseExp()
+            let inner_exp = try! parseExpr(precedence: 0)
             if tokens[current].type != .CloseParen {
                 throw ParsingError.unexpectedToken(found: tokens[current], expected: ")")
             }

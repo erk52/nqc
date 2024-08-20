@@ -52,7 +52,18 @@ struct TACUnaryInstruction: TACInstruction {
     var src: TACValue
     var dst: TACValue
     func toString() -> String {
-        return "\(op)(\(src.toString()), \(dst.toString())"
+        return "Unary(\(op) \(src.toString()) -> \(dst.toString())"
+    }
+}
+
+struct TACBinaryInstruction: TACInstruction {
+    var op: String
+    var src1: TACValue
+    var src2: TACValue
+    var dst: TACValue
+    
+    func toString() -> String {
+        return "Bin(\(src1.toString()) \(op) \(src2.toString()) -> \(dst.toString()))"
     }
 }
 
@@ -86,14 +97,21 @@ class TACEmitter {
     
     func emitTacky(exp: ASTExpr) throws -> TACValue {
         switch exp {
-        case is ASTConstantExpr:
-            let const = exp as! ASTConstantExpr
+        case is ASTConstantFactor:
+            let const = exp as! ASTConstantFactor
             return TACConstant(value: const.value)
-        case is ASTUnaryExpr:
-            let rt = exp as! ASTUnaryExpr
+        case is ASTUnaryFactor:
+            let rt = exp as! ASTUnaryFactor
             var src = try! emitTacky(exp: rt.right)
             var dst = TACVar(identifier: makeTempName())
             instructions.append(TACUnaryInstruction(op: rt.op, src: src, dst: dst))
+            return dst
+        case is ASTBinaryExpr:
+            let binex = exp as! ASTBinaryExpr
+            let v1 = try! emitTacky(exp: binex.left)
+            let v2 = try! emitTacky(exp: binex.right)
+            let dst = TACVar(identifier: makeTempName())
+            instructions.append(TACBinaryInstruction(op: binex.op, src1: v1, src2: v2, dst: dst))
             return dst
         default:
             throw TackyError.wrongValueType(found: exp.toString())

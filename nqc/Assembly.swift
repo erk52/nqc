@@ -79,6 +79,31 @@ struct ASMReturnInstr: ASMInstruction {
     }
 }
 
+struct ASMBinaryInstruction: ASMInstruction {
+    var src: ASMOperand
+    var dst: ASMOperand
+    var op: String
+    let op_map = ["+": "addl", "-": "subl", "*": "imull"]
+    func emitCode() -> String {
+        let s = src.emitCode()
+        let d = dst.emitCode()
+        return op_map[op]! + "\t\(s),\t\(d)"
+    }
+}
+
+struct ASMIdivInstruction: ASMInstruction {
+    var operand: ASMOperand
+    
+    func emitCode() -> String {
+        return "idivl" + "\t" + operand.emitCode()
+    }
+}
+
+struct ASMCdqInstruction: ASMInstruction {
+    func emitCode() -> String {
+        return "cdq"
+    }
+}
 protocol ASMOperand: ASM {
     
 }
@@ -92,7 +117,7 @@ struct ASMImm: ASMOperand {
 
 struct ASMReg: ASMOperand {
     var register: String
-    let reg_codes = ["AX": "%eax", "r10d": "%r10d"]
+    let reg_codes = ["AX": "%eax", "r10d": "%r10d", "DX": "%edx", "r11d" : "%r10d"]
     func emitCode() -> String {
         return reg_codes[register]!
     }
@@ -136,6 +161,30 @@ func convertInstruction(tac: TACInstruction) throws -> [ASMInstruction] {
         let src = try! convertValue(tac: tac_u.src)
         let dst = try! convertValue(tac: tac_u.dst)
         return [ASMMovInstr(src: src, dst: dst), ASMUnaryInstr(op: tac_u.op, operand: dst)]
+    case is TACBinaryInstruction:
+        let tac_b = tac as! TACBinaryInstruction
+        let src1 = try! convertValue(tac: tac_b.src1)
+        let src2 = try! convertValue(tac: tac_b.src2)
+        let dst = try! convertValue(tac: tac_b.dst)
+        if tac_b.op == "+" || tac_b.op == "-" || tac_b.op == "*" {
+            return [ASMMovInstr(src: src1, dst: dst), ASMBinaryInstruction(src: src2, dst: dst, op: tac_b.op)]
+        } else if tac_b.op == "/"{
+            return [
+                ASMMovInstr(src: src1, dst: ASMReg(register: "AX")),
+                ASMCdqInstruction(),
+                ASMIdivInstruction(operand: src2),
+                ASMMovInstr(src: ASMReg(register: "AX"), dst: dst)
+            ]
+        } else if tac_b.op == "%" {
+            return [
+                ASMMovInstr(src: src1, dst: ASMReg(register: "AX")),
+                ASMCdqInstruction(),
+                ASMIdivInstruction(operand: src2),
+                ASMMovInstr(src: ASMReg(register: "DX"), dst: dst)
+            ]
+        } else {
+            throw AssemblyError.wrongValueType(found: tac_b.op)
+        }
     default:
         throw AssemblyError.wrongValueType(found: tac.toString())
     }
@@ -146,9 +195,21 @@ func emitAssembly(program: TACProgram) -> ASMProgram {
     var asm_instr: [ASMInstruction] = []
     for instr in tacfun.body {
         asm_instr.append(contentsOf: try! convertInstruction(tac: instr))
+    }/*
+    print("=====First Pass ASM")
+    for instr in asm_instr{
+        print(instr.emitCode())
     }
+    print("=====Replace Pseudo")*/
     asm_instr = replacePseudoRegisters(instructions: asm_instr)
-    asm_instr = fixMovOperations(instructions: asm_instr)
+    //for instr in asm_instr{
+    //    print(instr.emitCode())
+    //}
+    //print("=====Final Pass")
+    asm_instr = fixInvalidInstructions(instructions: asm_instr)
+    //for instr in asm_instr{
+    //    print(instr.emitCode())
+    //}
     
     return ASMProgram(
         function: ASMFunction(
@@ -198,18 +259,40 @@ func replacePseudoRegisters(instructions: [ASMInstruction]) -> [ASMInstruction] 
             }
             new_instr.append(unary)
         case is ASMReturnInstr:
-            var ret = instr as! ASMReturnInstr
-            /*if ret.value is ASMPseudo {
-                let old = ret.value as! ASMPseudo
+            let ret = instr as! ASMReturnInstr
+            new_instr.append(ret)
+        case is ASMBinaryInstruction:
+            var binary = instr as! ASMBinaryInstruction
+            if binary.src is ASMPseudo {
+                let old1 = binary.src as! ASMPseudo
+                if identifiers[old1.identifier] == nil {
+                    identifiers[old1.identifier] = offset
+                    offset -= 4
+                }
+                binary.src = ASMStack(value: identifiers[old1.identifier]!)
+            }
+            if binary.dst is ASMPseudo {
+                let old2 = binary.dst as! ASMPseudo
+                if identifiers[old2.identifier] == nil {
+                    identifiers[old2.identifier] = offset
+                    offset -= 4
+                }
+                binary.dst = ASMStack(value: identifiers[old2.identifier]!)
+            }
+            new_instr.append(binary)
+        case is ASMIdivInstruction:
+            var idiv = instr as! ASMIdivInstruction
+            if idiv.operand is ASMPseudo {
+                let old = idiv.operand as! ASMPseudo
                 if identifiers[old.identifier] == nil {
                     identifiers[old.identifier] = offset
                     offset -= 4
                 }
-                ret.value = ASMStack(value: identifiers[old.identifier]!)
-            }*/
-            new_instr.append(ret)
+                idiv.operand = ASMStack(value: identifiers[old.identifier]!)
+            }
+            new_instr.append(idiv)
         default:
-            continue
+            new_instr.append(instr)
         }
     }
     if offset + 4 != 0 {
@@ -218,15 +301,41 @@ func replacePseudoRegisters(instructions: [ASMInstruction]) -> [ASMInstruction] 
     return new_instr
 }
 
-func fixMovOperations(instructions: [ASMInstruction]) -> [ASMInstruction] {
+func fixInvalidInstructions(instructions: [ASMInstruction]) -> [ASMInstruction] {
     var new_instr: [ASMInstruction] = []
     for instr in instructions {
         switch instr {
+        case is ASMIdivInstruction:
+            // First, we need to fix idiv instructions that take constant operands.
+            // Whenever idiv needs to operate on a constant, we copy that constant into our scratch register first.
+            let idiv = instr as! ASMIdivInstruction
+            if idiv.operand is ASMImm {
+                new_instr.append(ASMMovInstr(src: idiv.operand, dst: ASMReg(register: "r10d")))
+                new_instr.append(ASMIdivInstruction(operand: ASMReg(register: "r10d")))
+            } else {
+                new_instr.append(instr)
+            }
         case is ASMMovInstr:
             let mv = instr as! ASMMovInstr
             if mv.src is ASMStack && mv.dst is ASMStack {
                 new_instr.append(ASMMovInstr(src: mv.src, dst: ASMReg(register: "r10d")))
                 new_instr.append(ASMMovInstr(src: ASMReg(register: "r10d"), dst: mv.dst))
+            } else {
+                new_instr.append(instr)
+            }
+        case is ASMBinaryInstruction:
+            let bn = instr as! ASMBinaryInstruction
+            if bn.op == "+" || bn.op == "-" {
+                if bn.dst is ASMStack && bn.src is ASMStack {
+                    new_instr.append(ASMMovInstr(src: bn.src, dst: ASMReg(register: "r10d")))
+                    new_instr.append(ASMBinaryInstruction(src: ASMReg(register: "r10d"), dst: bn.dst, op: bn.op))
+                } else {
+                    new_instr.append(instr)
+                }
+            } else if bn.op == "*" {
+                new_instr.append(ASMMovInstr(src: bn.dst, dst: ASMReg(register: "r11d")))
+                new_instr.append(ASMBinaryInstruction(src: bn.src, dst: ASMReg(register: "r11d"), op: "*"))
+                new_instr.append(ASMMovInstr(src: ASMReg(register: "r11d"), dst: bn.dst))
             } else {
                 new_instr.append(instr)
             }
