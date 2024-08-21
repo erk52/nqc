@@ -33,27 +33,26 @@ func main() {
     var program: String
     var filename: String
     //print(CommandLine.arguments)
-    shell("arch -x86_64 zsh")
     if CommandLine.arguments.count > 1 {
-        var p = CommandLine.arguments[1]
+        let p = CommandLine.arguments[1]
         filename = p//.components(separatedBy: "/").last!
         
         //PREPROCESS FILE
-        shell("gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
+        shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     } else {
-        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_3/valid/extra_credit/bitwise_precedence.c"
-        shell("gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
+        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_4/valid/multi_short_circuit.c"
+        shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     }
     print(program)
     //print("=====")
     let reg = try! tokenizeRegex(input: program)
     
-    var parser = Parser(tokens: reg)
+    let parser = Parser(tokens: reg)
     let ast = try! parser.parse()
     print(ast.toString())
-    var tachometer = TACEmitter()
+    let tachometer = TACEmitter()
     let tac = tachometer.convertAST(program: ast)
     for ln in tac.function.body {
         print(ln)
@@ -65,7 +64,7 @@ func main() {
     let assembly_file = filename.replacingOccurrences(of: ".c", with: ".s")
     let exec_file = filename.replacingOccurrences(of: ".c", with: "")
     try! final.write(toFile: assembly_file, atomically: false, encoding: String.Encoding.utf8)
-    let s = shell("gcc \(assembly_file) -o \(exec_file)")
+    let s = shell("arch -x86_64 gcc \(assembly_file) -o \(exec_file)")
     print(s)
 }
 

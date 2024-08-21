@@ -50,6 +50,15 @@ enum TokenType {
     case BitwiseXOr
     case LeftShift
     case RightShift
+    case LogicalNot
+    case LogicalAnd
+    case LogicalOr
+    case Equal
+    case NotEqual
+    case LessThan
+    case GreaterThan
+    case LessEqual
+    case GreaterEqual
 }
 
 let keywords = ["int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid]
@@ -163,6 +172,15 @@ let regexMap = [
     TokenType.BitwiseXOr: /^\^/,
     TokenType.LeftShift: /^<</,
     TokenType.RightShift: /^>>/,
+    TokenType.LogicalAnd: /^\&\&/,
+    TokenType.LogicalOr: /^\|\|/,
+    TokenType.LogicalNot: /^\!/,
+    TokenType.Equal: /^\==/,
+    TokenType.NotEqual: /^\!\=/,
+    TokenType.LessThan: /^</,
+    TokenType.GreaterThan: /^>/,
+    TokenType.LessEqual: /^<\=/,
+    TokenType.GreaterEqual: /^>\=/,
     TokenType.Identifier: /^[a-zA-Z_]\w*\b/,
 ]
 

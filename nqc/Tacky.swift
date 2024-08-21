@@ -67,6 +67,45 @@ struct TACBinaryInstruction: TACInstruction {
     }
 }
 
+struct TACCopyInstruction: TACInstruction {
+    var src: TACValue
+    var dst: TACValue
+    
+    func toString() -> String {
+        return "Copy(\(src.toString()), \(dst.toString())"
+    }
+}
+
+struct TACJumpInstruction: TACInstruction {
+    var target: String
+    func toString() ->String {
+        return "Jump(\(target))"
+    }
+}
+
+struct TACJumpIfZeroInstruction: TACInstruction {
+    var condition: TACValue
+    var target: String
+    func toString() -> String {
+        return "JumpIfZero(cond=\(condition.toString()), target=\(target)"
+    }
+}
+
+struct TACJumpIfNotZeroInstruction: TACInstruction {
+    var condition: TACValue
+    var target: String
+    func toString() -> String {
+        return "JumpIfNotZero(cond=\(condition.toString()), target=\(target)"
+    }
+}
+
+struct TACLabel: TACInstruction {
+    var identifier: String
+    func toString() -> String {
+        return "Label(\(identifier)"
+    }
+}
+
 protocol TACValue: TAC {
     
 }
@@ -87,12 +126,22 @@ struct TACVar: TACValue {
 
 class TACEmitter {
     var counter: Int = 0
+    var labelCounters: [String: Int] = [:]
     var instructions: [TACInstruction] = []
     
 
     func makeTempName() -> String {
         counter += 1
         return "tmp.\(counter)"
+    }
+    
+    func makeLabel(base: String) -> String {
+        if labelCounters[base] == nil {
+            labelCounters[base] = 0
+        } else {
+            labelCounters[base] = labelCounters[base]! + 1
+        }
+        return "L\(base)_\(labelCounters[base]!)"
     }
     
     func emitTacky(exp: ASTExpr) throws -> TACValue {
@@ -102,30 +151,65 @@ class TACEmitter {
             return TACConstant(value: const.value)
         case is ASTUnaryFactor:
             let rt = exp as! ASTUnaryFactor
-            var src = try! emitTacky(exp: rt.right)
-            var dst = TACVar(identifier: makeTempName())
+            let src = try! emitTacky(exp: rt.right)
+            let dst = TACVar(identifier: makeTempName())
             instructions.append(TACUnaryInstruction(op: rt.op, src: src, dst: dst))
             return dst
         case is ASTBinaryExpr:
             let binex = exp as! ASTBinaryExpr
-            let v1 = try! emitTacky(exp: binex.left)
-            let v2 = try! emitTacky(exp: binex.right)
-            let dst = TACVar(identifier: makeTempName())
-            instructions.append(TACBinaryInstruction(op: binex.op, src1: v1, src2: v2, dst: dst))
-            return dst
+            switch binex.op {
+            case "+", "-","/", "*", "%", ">", "<", ">=", "<=", "==", "!=":
+                let v1 = try! emitTacky(exp: binex.left)
+                let v2 = try! emitTacky(exp: binex.right)
+                let dst = TACVar(identifier: makeTempName())
+                instructions.append(TACBinaryInstruction(op: binex.op, src1: v1, src2: v2, dst: dst))
+                return dst
+            case "&&":
+                let false_label = makeLabel(base: "and_false")
+                let v1 = try! emitTacky(exp: binex.left)
+                instructions.append(TACJumpIfZeroInstruction(condition: v1, target:false_label))
+                let v2 = try! emitTacky(exp: binex.right)
+                instructions.append(TACJumpIfZeroInstruction(condition: v2, target: false_label))
+                let result = TACVar(identifier: makeTempName())
+                instructions.append(TACCopyInstruction(src: TACConstant(value: 1), dst: result))
+                let end_label = makeLabel(base: "and_end")
+                instructions.append(TACJumpInstruction(target: end_label))
+                instructions.append(TACLabel(identifier: false_label))
+                instructions.append(TACCopyInstruction(src: TACConstant(value: 0), dst: result))
+                instructions.append(TACLabel(identifier: end_label))
+                return result
+            case "||":
+                let true_label = makeLabel(base: "or_true")
+                let v1 = try! emitTacky(exp: binex.left)
+                instructions.append(TACJumpIfNotZeroInstruction(condition: v1, target:true_label))
+                let v2 = try! emitTacky(exp: binex.right)
+                instructions.append(TACJumpIfNotZeroInstruction(condition: v2, target: true_label))
+                let result = TACVar(identifier: makeTempName())
+                instructions.append(TACCopyInstruction(src: TACConstant(value: 0), dst: result))
+                let end_label = makeLabel(base: "or_end")
+                instructions.append(TACJumpInstruction(target: end_label))
+                instructions.append(TACLabel(identifier: true_label))
+                instructions.append(TACCopyInstruction(src: TACConstant(value: 1), dst: result))
+                instructions.append(TACLabel(identifier: end_label))
+                return result
+            default:
+                throw TackyError.wrongValueType(found: "Binary operator \(binex.op) not implemented.")
+            }
+            
         default:
             throw TackyError.wrongValueType(found: exp.toString())
         }
     }
     
     func convertAST(program: ASTProgram) -> TACProgram {
-        var ast_fun = program.function
-        var ast_stmt = ast_fun.body as! ASTReturnStatement
+        let ast_fun = program.function
+        let ast_stmt = ast_fun.body as! ASTReturnStatement
         
-        var return_instr = TACReturnInstruction(value: try! emitTacky(exp: ast_stmt.exp))
+        let return_instr = TACReturnInstruction(value: try! emitTacky(exp: ast_stmt.exp))
         instructions.append(return_instr)
         
         let tac_func = TACFunction(name: ast_fun.name, body: instructions)
         return TACProgram(function: tac_func)
     }
+
 }

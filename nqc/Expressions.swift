@@ -22,7 +22,7 @@ protocol ASTNode {
 struct ASTProgram: ASTNode {
     var function: ASTFunction
     func toString() -> String {
-        return "Program(function=\(function.toString())"
+        return "Program(function=\(function.toString()))"
     }
 }
 
@@ -55,14 +55,6 @@ struct ASTBinaryExpr: ASTExpr {
         return "Binary(\(left.toString()), \(op), \(right.toString()))"
     }
 }
-/*
-struct ASTFactorExpr: ASTExpr {
-    var factor: ASTFactor
-    func toString() -> String {
-        return "Expr(\(factor.toString())"
-    }
-}*/
-
 protocol ASTFactor: ASTNode {
     
 }
@@ -79,28 +71,19 @@ struct ASTUnaryFactor: ASTExpr {
     var right: ASTExpr
     
     func toString() -> String {
-        return "Unary(\(op), \(right.toString())"
+        return "Unary(\(op), \(right.toString()))"
     }
 }
-/*
-struct ASTExprFactor: ASTExpr {
-    var expr: ASTExpr
-    func toString() -> String {
-        return "Factor(\(expr.toString()))"
-    }
-}*/
-/*
-struct ASTBinaryExpr: ASTExpr {
-    var op: String
-    var left: ASTFactor
-    var right: ASTFactor
-    
-    func toString() -> String {
-        return "Binary(\(left.toString()), \(op), \(right.toString()))"
-    }
-}*/
 
-let PRECEDENCE_ORDER = ["*": 500, "/": 500, "%": 500, "+": 450, "-": 450, ">>": 400, "<<": 400, "&": 350, "^": 325, "|": 300]
+let PRECEDENCE_ORDER = ["*": 500, "/": 500, "%": 500,
+                        "+": 450, "-": 450,
+                        ">>": 400, "<<": 400,
+                        ">=": 370, ">": 370,
+                        "<=": 370, "<": 370,
+                        "==": 360, "!=": 360,
+                        "&": 350, "^": 325, "|": 300,
+                        "&&": 290, "||": 280,
+]
 
 // ----- NOW PARSE
 
@@ -200,7 +183,7 @@ class Parser {
         if tokens[current].type == .Constant {
             current += 1
             return ASTConstantFactor(value: Int(tokens[current-1].lexeme)!)
-        } else if tokens[current].type == .BitwiseComplement || tokens[current].type == .Negation {
+        } else if tokens[current].type == .BitwiseComplement || tokens[current].type == .Negation || tokens[current].type == .LogicalNot {
             let op: Token = tokens[current]
             current += 1
             let rt = try! parseFactor()
@@ -213,7 +196,7 @@ class Parser {
             }
             current += 1
             return inner_exp
-        }else {
+        } else {
             throw ParsingError.unexpectedToken(found: tokens[current], expected: "Constant Int token")
         }
     }
