@@ -29,8 +29,12 @@ let id_chars = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345678
 
 enum TokenType {
     case KeywordInt
+    case KeywordIf
+    case KeywordElse
     case KeywordVoid
     case KeywordReturn
+    case Question
+    case Colon
     case Identifier
     case OpenParen
     case CloseParen
@@ -41,6 +45,7 @@ enum TokenType {
     case BitwiseComplement
     case Negation
     case Decrement
+    case Increment
     case Plus
     case Star
     case Slash
@@ -53,6 +58,17 @@ enum TokenType {
     case LogicalNot
     case LogicalAnd
     case LogicalOr
+    case Assignment
+    case PlusAssignment
+    case MinusAssignment
+    case MultAssignment
+    case DivAssignment
+    case ModAssignment
+    case AndAssign
+    case OrAssign
+    case XOrAssign
+    case SHLAssign
+    case SHRAssign
     case Equal
     case NotEqual
     case LessThan
@@ -61,7 +77,10 @@ enum TokenType {
     case GreaterEqual
 }
 
-let keywords = ["int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid]
+let keywords = [
+    "int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid,
+    "if": TokenType.KeywordIf, "else": TokenType.KeywordElse,
+]
 
 struct Token {
     var type: TokenType
@@ -121,14 +140,12 @@ func tokenize(_ input: String) throws -> [Token] {
             //print("Got num: \(value)")
             i += 1
         } else if input[cur].isLetter {
-            //print(i, input[cur], "Word?")
             let start = cur
             while i < input.count - 1 && ( i == input.count - 1 || id_chars.contains(input[input.index(input.startIndex, offsetBy: i+1)])) {
                 i += 1
             }
             let value = String(input[start..<input.index(input.startIndex, offsetBy: i+1)])
-            
-            //print("Got word \(value)")
+
             
             switch value {
             case "int":
@@ -160,10 +177,13 @@ let regexMap = [
     TokenType.KeywordReturn: /^return\b/,
     TokenType.KeywordInt: /^int\b/,
     TokenType.KeywordVoid: /^void\b/,
+    TokenType.KeywordIf: /^if\b/,
+    TokenType.KeywordElse: /^else\b/,
     TokenType.Semicolon: /^;/,
     TokenType.BitwiseComplement: /^~/,
     TokenType.Negation: /^-/,
     TokenType.Decrement: /^--/,
+    TokenType.Increment: /^\+\+/,
     TokenType.Plus: /^\+/,
     TokenType.Star: /^\*/,
     TokenType.Slash: /^\//,
@@ -175,12 +195,25 @@ let regexMap = [
     TokenType.LogicalAnd: /^\&\&/,
     TokenType.LogicalOr: /^\|\|/,
     TokenType.LogicalNot: /^\!/,
+    TokenType.Assignment: /^\=/,
+    TokenType.PlusAssignment: /^\+\=/,
+    TokenType.MinusAssignment: /^-\=/,
+    TokenType.MultAssignment: /^\*\=/,
+    TokenType.DivAssignment: /^\/\=/,
+    TokenType.ModAssignment: /^\%\=/,
+    TokenType.AndAssign: /^\&\=/,
+    TokenType.OrAssign: /^\|\=/,
+    TokenType.XOrAssign: /^\^\=/,
+    TokenType.SHLAssign: /^<<\=/,
+    TokenType.SHRAssign: /^>>\=/,
     TokenType.Equal: /^\==/,
     TokenType.NotEqual: /^\!\=/,
     TokenType.LessThan: /^</,
     TokenType.GreaterThan: /^>/,
     TokenType.LessEqual: /^<\=/,
     TokenType.GreaterEqual: /^>\=/,
+    TokenType.Question: /^\?/,
+    TokenType.Colon: /^\:/,
     TokenType.Identifier: /^[a-zA-Z_]\w*\b/,
 ]
 
@@ -204,11 +237,11 @@ func tokenizeRegex(input: String) throws -> [Token] {
             }
             i += 2
             continue
-        } else if input[cur] == "+" {
+        } else if input[cur] == "+" && input.getChar(at: i + 1) != "="  && input.getChar(at: i+1) != "+" {
             output.append(Token(type: .Plus, lexeme: "+"))
             i += 1
             continue
-        } else if input[cur] == "&" && input.getChar(at: i+1) != "&" {
+        } else if input[cur] == "&" && input.getChar(at: i+1) != "&" && input.getChar(at: i+1) != "="{
             output.append(Token(type: .BitwiseAnd, lexeme: "&"))
             i += 1
             continue

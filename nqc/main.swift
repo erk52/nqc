@@ -41,19 +41,28 @@ func main() {
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     } else {
-        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_4/valid/multi_short_circuit.c"
+        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_6/valid/if_nested.c"
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     }
     print(program)
     //print("=====")
     let reg = try! tokenizeRegex(input: program)
-    
+    //print(reg)
     let parser = Parser(tokens: reg)
     let ast = try! parser.parse()
-    print(ast.toString())
+    print("========")
+    for ln in ast.function.body {
+        print(ln.toString())
+    }
+    print("========")
+    let validator = SemanticAnalysis()
+    let validated = validator.validate(ast)
+    print(validated.toString())
+    print("========")
     let tachometer = TACEmitter()
-    let tac = tachometer.convertAST(program: ast)
+    let tac = tachometer.convertAST(program: validated)
+    print("========")
     for ln in tac.function.body {
         print(ln)
     }

@@ -128,6 +128,7 @@ class TACEmitter {
     var counter: Int = 0
     var labelCounters: [String: Int] = [:]
     var instructions: [TACInstruction] = []
+    var postfixes: [TACInstruction] = []
     
 
     func makeTempName() -> String {
@@ -155,10 +156,29 @@ class TACEmitter {
             let dst = TACVar(identifier: makeTempName())
             instructions.append(TACUnaryInstruction(op: rt.op, src: src, dst: dst))
             return dst
+        case is ASTVarExpr:
+            let v = exp as! ASTVarExpr
+            return TACVar(identifier: v.identifier)
+        case is ASTAssignmentExpr:
+            let ass = exp as! ASTAssignmentExpr
+            let v = ass.left as! ASTVarExpr
+            let tac_var = TACVar(identifier: v.identifier)
+            let result = try! emitTacky(exp: ass.right)
+            instructions.append(TACCopyInstruction(src: result, dst: tac_var))
+            return tac_var
+        case is ASTCompoundAssignmentExpr:
+            let ass = exp as! ASTCompoundAssignmentExpr
+            let v = ass.left as! ASTVarExpr
+            let tac_var = TACVar(identifier: v.identifier)
+            let result = try! emitTacky(exp: ass.right)
+            
+            instructions.append(
+                TACBinaryInstruction(op: ass.op.replacingOccurrences(of: "=", with: ""), src1: tac_var, src2: result, dst: tac_var))
+            return tac_var
         case is ASTBinaryExpr:
             let binex = exp as! ASTBinaryExpr
             switch binex.op {
-            case "+", "-","/", "*", "%", ">", "<", ">=", "<=", "==", "!=":
+            case "+", "-","/", "*", "%", ">", "<", ">=", "<=", "==", "!=", ">>", "<<", "|", "^", "&":
                 let v1 = try! emitTacky(exp: binex.left)
                 let v2 = try! emitTacky(exp: binex.right)
                 let dst = TACVar(identifier: makeTempName())
@@ -195,18 +215,81 @@ class TACEmitter {
             default:
                 throw TackyError.wrongValueType(found: "Binary operator \(binex.op) not implemented.")
             }
-            
+        case is ASTConditionalExpr:
+            let cexp = exp as! ASTConditionalExpr
+            let c = try! emitTacky(exp: cexp.cond)
+            let result = TACVar(identifier: makeTempName())
+            let targ = makeLabel(base: "ternary_true")
+            let endl = makeLabel(base: "end_ternary")
+            instructions.append(TACJumpIfZeroInstruction(condition: c, target: targ))
+            let v1 = try! emitTacky(exp: cexp.exp1)
+            instructions.append(TACCopyInstruction(src: v1, dst: result))
+            instructions.append(TACJumpInstruction(target: endl))
+            instructions.append(TACLabel(identifier: targ))
+            let v2 = try! emitTacky(exp: cexp.exp2)
+            instructions.append(TACCopyInstruction(src: v2, dst: result))
+            instructions.append(TACLabel(identifier: endl))
+            return result
         default:
             throw TackyError.wrongValueType(found: exp.toString())
         }
     }
     
+    func convertStatement(_ stmt: ASTStatement) {
+        switch stmt {
+            case is ASTNullStatement:
+                return
+            case is ASTReturnStatement:
+                let ret = stmt as! ASTReturnStatement
+                instructions.append(TACReturnInstruction(value: try! emitTacky(exp: ret.exp)))
+            case is ASTExpressionStatement:
+                let ex = stmt as! ASTExpressionStatement
+                try! emitTacky(exp: ex.exp)
+            case is ASTIfStatement:
+                let i_stmt = stmt as! ASTIfStatement
+                let c = try! emitTacky(exp: i_stmt.condition)
+                let endlab = makeLabel(base: "ifend")
+            if i_stmt.els == nil {
+                instructions.append(TACJumpIfZeroInstruction(condition: c, target: endlab))
+                convertStatement(i_stmt.then)
+                instructions.append(TACLabel(identifier: endlab))
+            } else {
+                let else_lab = makeLabel(base: "else")
+                instructions.append(TACJumpIfZeroInstruction(condition: c, target: else_lab))
+                convertStatement(i_stmt.then)
+                instructions.append(TACJumpInstruction(target: endlab))
+                instructions.append(TACLabel(identifier: else_lab))
+                convertStatement(i_stmt.els!)
+                instructions.append(TACLabel(identifier: endlab))
+            }
+            default:
+                return
+            }
+        
+    }
+    
     func convertAST(program: ASTProgram) -> TACProgram {
         let ast_fun = program.function
-        let ast_stmt = ast_fun.body as! ASTReturnStatement
+        let ast_stmts = ast_fun.body
+        for st in ast_stmts {
+            switch st {
+            case is ASTBlockDeclaration:
+                let dec = st as! ASTBlockDeclaration
+                if dec.declaration.init_val != nil {
+                    let declared = try! emitTacky(exp: dec.declaration.init_val!)
+                    instructions.append(TACCopyInstruction(src: declared, dst: TACVar(identifier: dec.declaration.identifier)))
+                }
+            case is ASTBlockStatement:
+                let block = st as! ASTBlockStatement
+                convertStatement(block.statement)
+            default:
+                continue
+            }
+        }
         
-        let return_instr = TACReturnInstruction(value: try! emitTacky(exp: ast_stmt.exp))
-        instructions.append(return_instr)
+        if !(instructions.last is TACReturnInstruction){
+            instructions.append(TACReturnInstruction(value: TACConstant(value: 0)))
+        }
         
         let tac_func = TACFunction(name: ast_fun.name, body: instructions)
         return TACProgram(function: tac_func)

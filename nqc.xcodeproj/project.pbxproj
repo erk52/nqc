@@ -12,6 +12,7 @@
 		1C51AC982C6FD20A00C0B864 /* Lexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C51AC972C6FD20A00C0B864 /* Lexer.swift */; };
 		1C51AC9A2C6FDBCB00C0B864 /* Assembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C51AC992C6FDBCB00C0B864 /* Assembly.swift */; };
 		1C51AC9E2C72460800C0B864 /* Tacky.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C51AC9D2C72460800C0B864 /* Tacky.swift */; };
+		1C51ACA02C77A35900C0B864 /* Semantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C51AC9F2C77A35900C0B864 /* Semantics.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -33,6 +34,7 @@
 		1C51AC972C6FD20A00C0B864 /* Lexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lexer.swift; sourceTree = "<group>"; };
 		1C51AC992C6FDBCB00C0B864 /* Assembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assembly.swift; sourceTree = "<group>"; };
 		1C51AC9D2C72460800C0B864 /* Tacky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tacky.swift; sourceTree = "<group>"; };
+		1C51AC9F2C77A35900C0B864 /* Semantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Semantics.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +71,7 @@
 				1C51AC972C6FD20A00C0B864 /* Lexer.swift */,
 				1C51AC952C6EDED000C0B864 /* Expressions.swift */,
 				1C51AC9D2C72460800C0B864 /* Tacky.swift */,
+				1C51AC9F2C77A35900C0B864 /* Semantics.swift */,
 				1C51AC992C6FDBCB00C0B864 /* Assembly.swift */,
 			);
 			path = nqc;
@@ -135,6 +138,7 @@
 				1C51AC8F2C6E8CE500C0B864 /* main.swift in Sources */,
 				1C51AC9A2C6FDBCB00C0B864 /* Assembly.swift in Sources */,
 				1C51AC9E2C72460800C0B864 /* Tacky.swift in Sources */,
+				1C51ACA02C77A35900C0B864 /* Semantics.swift in Sources */,
 				1C51AC982C6FD20A00C0B864 /* Lexer.swift in Sources */,
 				1C51AC962C6EDED000C0B864 /* Expressions.swift in Sources */,
 			);
