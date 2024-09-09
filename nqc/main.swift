@@ -41,7 +41,7 @@ func main() {
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     } else {
-        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_7/valid/use_in_inner_scope.c"
+        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_8/valid/while.c"
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     }
@@ -56,10 +56,12 @@ func main() {
         print(ln.toString())
     }
     print("========")
+    
     let validator = SemanticAnalysis()
     let validated = validator.validate(ast)
     print(validated.toString())
     print("========")
+    
     let tachometer = TACEmitter()
     let tac = tachometer.convertAST(program: validated)
     for ln in tac.function.body {

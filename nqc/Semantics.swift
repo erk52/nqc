@@ -5,11 +5,14 @@ enum SemanticsError: Error {
     case undeclaredVariable(msg: String)
     case unrecognizedStatementType(msg: String)
     case invaldLValue(msg: String)
+    case missingLoopLabel(msg: String)
 }
 
 
 class SemanticAnalysis {
     var varCounters: [String: Int] = [:]
+    var loopCounter = 0
+    var currentLabel: String?
     
     func validate(_ ast: ASTProgram) -> ASTProgram {
         let fun = ast.function
@@ -26,6 +29,12 @@ class SemanticAnalysis {
         }
     }
     
+    func makeLoopLabel() -> String {
+        let lab = "Loop\(loopCounter)"
+        loopCounter += 1
+        return lab
+    }
+    
     func resolveDeclaration(dec: ASTDeclaration, variableMap: inout [String: (String, Bool)]) throws -> ASTDeclaration {
         //var variableMap = variableMap
         if variableMap[dec.identifier] != nil && variableMap[dec.identifier]!.1 {
@@ -38,6 +47,23 @@ class SemanticAnalysis {
             return ASTDeclaration(identifier: unique, init_val: ival)
         } else {
             return ASTDeclaration(identifier: unique)
+        }
+    }
+    
+    func resolveForInit(init_stmt: ASTForInit, variableMap: inout [String: (String, Bool)]) throws -> ASTForInit {
+        switch init_stmt {
+        case is ASTForInitExpr:
+            let iex = init_stmt as! ASTForInitExpr
+            if iex.init_exp != nil {
+                return ASTForInitExpr(init_exp: try! resolveExp(iex.init_exp!, variableMap: variableMap))
+            } else {
+                return init_stmt
+            }
+        case is ASTForInitDecl:
+            let dec = init_stmt as! ASTForInitDecl
+            return ASTForInitDecl(init_decl: try! resolveDeclaration(dec: dec.init_decl, variableMap: &variableMap))
+        default:
+            throw SemanticsError.unrecognizedStatementType(msg: "Expected For Initializer, got: \(init_stmt)")
         }
     }
     
@@ -60,9 +86,45 @@ class SemanticAnalysis {
                 return ASTIfStatement(condition: cond, then: then, els: els)
             }
             return ASTIfStatement(condition: cond, then: then)
+        case is ASTWhileStatement:
+            let this_loop = makeLoopLabel()
+            currentLabel = this_loop
+            let w_stmt = stmt as! ASTWhileStatement
+            let body = try! resolveStatement(w_stmt.body, variableMap: variableMap)
+            let cond = try! resolveExp(w_stmt.cond, variableMap: variableMap)
+            return ASTWhileStatement(label: this_loop, cond: cond, body: body)
+        case is ASTDoWhileStatement:
+            let this_loop = makeLoopLabel()
+            currentLabel = this_loop
+            let d_stmt = stmt as! ASTDoWhileStatement
+            let body = try! resolveStatement(d_stmt.body, variableMap: variableMap)
+            let cond = try! resolveExp(d_stmt.cond, variableMap: variableMap)
+            return ASTDoWhileStatement(label: this_loop, cond: cond, body: body)
+        case is ASTForStatement:
+            let this_loop = makeLoopLabel()
+            currentLabel = this_loop
+            let f_stmt = stmt as! ASTForStatement
+            var newMap = copyNewVarMap(variableMap)
+            let initi = try! resolveForInit(init_stmt: f_stmt.initializer, variableMap: &newMap)
+            var cond: ASTExpr?
+            var post: ASTExpr?
+            if f_stmt.cond != nil { cond = try! resolveExp(f_stmt.cond!, variableMap: newMap) }
+            if f_stmt.post != nil { post = try! resolveExp(f_stmt.post!, variableMap: newMap) }
+            let bod = try! resolveStatement(f_stmt.body, variableMap: newMap)
+            return ASTForStatement(label: this_loop, initializer: initi, cond: cond, post:post, body: bod)
         case is ASTCompoundStatement:
             let c_stmt = stmt as! ASTCompoundStatement
             return ASTCompoundStatement(body: try! resolveBlock(c_stmt.body, variableMap: copyNewVarMap(variableMap)))
+        case is ASTBreakStatement:
+            if currentLabel == nil {
+                throw SemanticsError.missingLoopLabel(msg: "Break/Continue outside of loop")
+            }
+            return ASTBreakStatement(label: currentLabel!)
+        case is ASTContinueStatement:
+            if currentLabel == nil {
+                throw SemanticsError.missingLoopLabel(msg: "Break/Continue outside of loop")
+            }
+            return ASTContinueStatement(label: currentLabel!)
         default:
             throw SemanticsError.unrecognizedStatementType(msg: "\(stmt)")
         }
@@ -98,8 +160,6 @@ class SemanticAnalysis {
     func resolveExp(_ exp: ASTExpr, variableMap: [String: (String, Bool)]) throws -> ASTExpr {
         switch exp {
         case is ASTAssignmentExpr:
-            print("Resolving assignment: \(exp.toString())")
-            print("With vmap: \(variableMap)")
             let a_exp = exp as! ASTAssignmentExpr
             if !(a_exp.left is ASTVarExpr) {
                 throw SemanticsError.invaldLValue(msg: "Invalid lval in assignment: \(a_exp.left) is not a Var")

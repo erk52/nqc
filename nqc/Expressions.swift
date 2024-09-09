@@ -121,6 +121,75 @@ struct ASTCompoundStatement: ASTStatement {
     }
 }
 
+struct ASTBreakStatement: ASTStatement {
+    var label: String?
+    func toString() -> String {
+        return "BreakStatement(\(label ?? "")"
+    }
+}
+
+struct ASTContinueStatement: ASTStatement {
+    var label: String?
+    func toString() -> String {
+        return "ContinueStatement(\(label ?? "")"
+    }
+}
+
+struct ASTWhileStatement: ASTStatement {
+    var label: String?
+    var cond: ASTExpr
+    var body: ASTStatement
+    func toString() -> String {
+        return "While(cond=\(cond.toString()), body=\(body.toString())"
+    }
+}
+
+struct ASTDoWhileStatement: ASTStatement {
+    var label: String?
+    var cond: ASTExpr
+    var body: ASTStatement
+    func toString() -> String {
+        return "DoWhile(cond=\(cond.toString()), body=\(body.toString())"
+    }
+}
+
+protocol ASTForInit: ASTNode {}
+
+struct ASTForStatement: ASTStatement {
+    var label: String?
+    var initializer: ASTForInit
+    var cond: ASTExpr?
+    var post: ASTExpr?
+    var body: ASTStatement
+    func toString() -> String {
+        var out = "For("
+        if label != nil { out += "label=(\(label!)), "}
+        out += "init=\(initializer.toString()), "
+        if cond != nil { out += "cond=\(cond!.toString()), "}
+        if post != nil { out += "post=\(post!.toString()), "}
+        out += "body=\(body.toString()))"
+        return out
+    }
+}
+
+struct ASTForInitDecl: ASTForInit {
+    var init_decl: ASTDeclaration
+    func toString() -> String {
+        return "ForInitDecl(dec=(\(init_decl.toString())))"
+    }
+}
+
+struct ASTForInitExpr: ASTForInit {
+    var init_exp: ASTExpr?
+    func toString() -> String {
+        if init_exp != nil {
+            return "ForInitExp(exp=(\(init_exp!.toString())))"
+        } else {
+            return "ForInitExp(exp=())"
+        }
+    }
+}
+
 protocol ASTExpr: ASTNode {}
 
 struct ASTBinaryExpr: ASTExpr {
@@ -286,8 +355,23 @@ class Parser {
         }
     }
     
+    func parseForInit() throws -> ASTForInit {
+        // “<for-init> ::= <declaration> | [<exp>] ;
+        if tokens[current].type == .KeywordInt {
+            return ASTForInitDecl(init_decl: try! parseDeclaration())
+        } else if tokens[current].type == .Semicolon {
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return ASTForInitExpr()
+        } else {
+            let ex = try! parseExpr(precedence: 0)
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return ASTForInitExpr(init_exp: ex)
+        }
+    }
+    
     func parseStatement() throws -> ASTStatement {
         // statement = Return(exp) | Expression(exp) | Null | If(exp condition, statement then, statement? else) | Compound(block)
+        print("Parse statement. Current token: \(tokens[current].lexeme)")
         if tokens[current].type == TokenType.KeywordReturn {
             current += 1
             let stmt = ASTReturnStatement(exp: try! parseExpr(precedence: 0))
@@ -312,6 +396,53 @@ class Parser {
             }
         } else if tokens[current].type == .OpenBrace {
             return ASTCompoundStatement(body: try! parseBlock())
+        } else if tokens[current].type == .KeywordBreak {
+            try! expectAndConsumeToken(ttype: .KeywordBreak)
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return ASTBreakStatement()
+        } else if tokens[current].type == .KeywordContinue {
+            try! expectAndConsumeToken(ttype: .KeywordContinue)
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return ASTContinueStatement()
+        } else if tokens[current].type == .KeywordWhile {
+            try! expectAndConsumeToken(ttype: .KeywordWhile)
+            try! expectAndConsumeToken(ttype: .OpenParen)
+            let ex = try! parseExpr(precedence: 0)
+            try! expectAndConsumeToken(ttype: .CloseParen)
+            let bod = try! parseStatement()
+            return ASTWhileStatement(cond: ex, body: bod)
+        } else if tokens[current].type == .KeywordDo {
+            try! expectAndConsumeToken(ttype: .KeywordDo)
+            let bod = try! parseStatement()
+            try! expectAndConsumeToken(ttype: .KeywordWhile)
+            try! expectAndConsumeToken(ttype: .OpenParen)
+            let ex = try! parseExpr(precedence: 0)
+            try! expectAndConsumeToken(ttype: .CloseParen)
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return ASTDoWhileStatement(cond: ex, body: bod)
+        } else if tokens[current].type == .KeywordFor {
+            try! expectAndConsumeToken(ttype: .KeywordFor)
+            try! expectAndConsumeToken(ttype: .OpenParen)
+            print("Parsing For initializer")
+            let finit = try! parseForInit()
+            print("Found \(finit.toString())")
+            
+            var cond: ASTExpr?
+            var post: ASTExpr?
+            if tokens[current].type != .Semicolon {
+                print("Parsing middle For Condition")
+                cond = try? parseExpr(precedence: 0)
+                print("Found \(cond!.toString())")
+            }
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            if tokens[current].type != .CloseParen {
+                print("Parsing post condition")
+                post = try! parseExpr(precedence: 0)
+                print("Found \(post!.toString())")
+            }
+            try! expectAndConsumeToken(ttype: .CloseParen)
+            let bod = try! parseStatement()
+            return ASTForStatement(initializer: finit, cond: cond, post: post, body: bod)
         } else {
             let exp_stmt = ASTExpressionStatement(exp: try! parseExpr(precedence: 0))
             try! expectAndConsumeToken(ttype: .Semicolon)

@@ -237,41 +237,90 @@ class TACEmitter {
     
     func convertStatement(_ stmt: ASTStatement) {
         switch stmt {
-            case is ASTNullStatement:
-                return
-            case is ASTReturnStatement:
-                let ret = stmt as! ASTReturnStatement
-                instructions.append(TACReturnInstruction(value: try! emitTacky(exp: ret.exp)))
-            case is ASTExpressionStatement:
-                let ex = stmt as! ASTExpressionStatement
-                try! emitTacky(exp: ex.exp)
-            case is ASTBlockStatement:
-                let b_stmt = stmt as! ASTBlockStatement
-                convertStatement(b_stmt.statement)
-            case is ASTIfStatement:
-                let i_stmt = stmt as! ASTIfStatement
-                let c = try! emitTacky(exp: i_stmt.condition)
-                let endlab = makeLabel(base: "ifend")
-                if i_stmt.els == nil {
-                    instructions.append(TACJumpIfZeroInstruction(condition: c, target: endlab))
-                    convertStatement(i_stmt.then)
-                    instructions.append(TACLabel(identifier: endlab))
-                } else {
-                    let else_lab = makeLabel(base: "else")
-                    instructions.append(TACJumpIfZeroInstruction(condition: c, target: else_lab))
-                    convertStatement(i_stmt.then)
-                    instructions.append(TACJumpInstruction(target: endlab))
-                    instructions.append(TACLabel(identifier: else_lab))
-                    convertStatement(i_stmt.els!)
-                    instructions.append(TACLabel(identifier: endlab))
-                }
-            case is ASTCompoundStatement:
-                let cstmt = stmt as! ASTCompoundStatement
-                convertBlock(cstmt.body)
-            default:
-                return
+        case is ASTNullStatement:
+            return
+        case is ASTReturnStatement:
+            let ret = stmt as! ASTReturnStatement
+            instructions.append(TACReturnInstruction(value: try! emitTacky(exp: ret.exp)))
+        case is ASTExpressionStatement:
+            let ex = stmt as! ASTExpressionStatement
+            try! emitTacky(exp: ex.exp)
+        case is ASTBlockStatement:
+            let b_stmt = stmt as! ASTBlockStatement
+            convertStatement(b_stmt.statement)
+        case is ASTIfStatement:
+            let i_stmt = stmt as! ASTIfStatement
+            let c = try! emitTacky(exp: i_stmt.condition)
+            let endlab = makeLabel(base: "ifend")
+            if i_stmt.els == nil {
+                instructions.append(TACJumpIfZeroInstruction(condition: c, target: endlab))
+                convertStatement(i_stmt.then)
+                instructions.append(TACLabel(identifier: endlab))
+            } else {
+                let else_lab = makeLabel(base: "else")
+                instructions.append(TACJumpIfZeroInstruction(condition: c, target: else_lab))
+                convertStatement(i_stmt.then)
+                instructions.append(TACJumpInstruction(target: endlab))
+                instructions.append(TACLabel(identifier: else_lab))
+                convertStatement(i_stmt.els!)
+                instructions.append(TACLabel(identifier: endlab))
             }
-        
+        case is ASTCompoundStatement:
+            let cstmt = stmt as! ASTCompoundStatement
+            convertBlock(cstmt.body)
+        case is ASTBreakStatement:
+            let bstmt = stmt as! ASTBreakStatement
+            instructions.append(TACJumpInstruction(target: "break_\(bstmt.label!)"))
+        case is ASTContinueStatement:
+            let cstmt = stmt as! ASTContinueStatement
+            instructions.append(TACJumpInstruction(target: "continue_\(cstmt.label!)"))
+        case is ASTDoWhileStatement:
+            let dw = stmt as! ASTDoWhileStatement
+            instructions.append(TACLabel(identifier: "start_\(dw.label!)"))
+            convertStatement(dw.body)
+            instructions.append(TACLabel(identifier: "continue_\(dw.label!)"))
+            let res = try! emitTacky(exp: dw.cond)
+            instructions.append(TACJumpIfNotZeroInstruction(condition: res, target: "start_\(dw.label!)"))
+            instructions.append(TACLabel(identifier: "break_\(dw.label!)"))
+        case is ASTWhileStatement:
+            let ws = stmt as! ASTWhileStatement
+            instructions.append(TACLabel(identifier: "continue_\(ws.label!)"))
+            let res = try! emitTacky(exp: ws.cond)
+            instructions.append(TACJumpIfZeroInstruction(condition: res, target: "break_\(ws.label!)"))
+            convertStatement(ws.body)
+            instructions.append(TACJumpInstruction(target: "continue_\(ws.label!)"))
+            instructions.append(TACLabel(identifier: "break_\(ws.label!)"))
+        case is ASTForStatement:
+            let fs = stmt as! ASTForStatement
+            //emit fs.init
+            if fs.initializer is ASTForInitDecl {
+                let dec = fs.initializer as! ASTForInitDecl
+                let declared = try! emitTacky(exp: dec.init_decl.init_val!)
+                instructions.append(TACCopyInstruction(src: declared, dst: TACVar(identifier: dec.init_decl.identifier)))
+            } else if fs.initializer is ASTForInitExpr {
+                let ex = fs.initializer as! ASTForInitExpr
+                if ex.init_exp != nil {
+                    try! emitTacky(exp: ex.init_exp!)
+                }
+            }
+            instructions.append(TACLabel(identifier: "start_\(fs.label!)"))
+            var res: TACValue
+            if fs.cond != nil {
+                res = try! emitTacky(exp: fs.cond!)
+            } else {
+                res = TACConstant(value: 1)
+            }
+            instructions.append(TACJumpIfZeroInstruction(condition: res, target: "break_\(fs.label!)"))
+            convertStatement(fs.body)
+            instructions.append(TACLabel(identifier: "continue_\(fs.label!)"))
+            if fs.post != nil {
+                try! emitTacky(exp: fs.post!)
+            }
+            instructions.append(TACJumpInstruction(target: "start_\(fs.label!)"))
+            instructions.append(TACLabel(identifier: "break_\(fs.label!)"))
+        default:
+            return
+        }
     }
     
     func convertBlock(_ block: ASTBlock) {

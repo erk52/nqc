@@ -84,7 +84,9 @@ enum TokenType {
 
 let keywords: [String: TokenType] = [
     "int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid,
-    "if": TokenType.KeywordIf, "else": TokenType.KeywordElse,
+    "if": TokenType.KeywordIf, "else": TokenType.KeywordElse, "for": TokenType.KeywordFor,
+    "do": TokenType.KeywordDo, "while": TokenType.KeywordWhile, "break": TokenType.KeywordBreak,
+    "continue": TokenType.KeywordContinue,
 ]
 
 struct Token {
@@ -104,6 +106,11 @@ let regexMap = [
     TokenType.KeywordVoid: /^void\b/,
     TokenType.KeywordIf: /^if\b/,
     TokenType.KeywordElse: /^else\b/,
+    TokenType.KeywordDo: /^do\b/,
+    TokenType.KeywordFor: /^for\b/,
+    TokenType.KeywordBreak: /^break\b/,
+    TokenType.KeywordContinue: /^continue\b/,
+    TokenType.KeywordWhile: /^while\b/,
     TokenType.Semicolon: /^;/,
     TokenType.BitwiseComplement: /^~/,
     TokenType.Negation: /^-/,
