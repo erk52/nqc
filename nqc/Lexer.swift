@@ -33,6 +33,11 @@ enum TokenType {
     case KeywordElse
     case KeywordVoid
     case KeywordReturn
+    case KeywordDo
+    case KeywordBreak
+    case KeywordWhile
+    case KeywordContinue
+    case KeywordFor
     case Question
     case Colon
     case Identifier
@@ -77,7 +82,7 @@ enum TokenType {
     case GreaterEqual
 }
 
-let keywords = [
+let keywords: [String: TokenType] = [
     "int": TokenType.KeywordInt, "return":TokenType.KeywordReturn, "void": TokenType.KeywordVoid,
     "if": TokenType.KeywordIf, "else": TokenType.KeywordElse,
 ]
@@ -85,87 +90,7 @@ let keywords = [
 struct Token {
     var type: TokenType
     var lexeme: String
-}
-
-func tokenize(_ input: String) throws -> [Token] {
-    var output: [Token] = []
-    
-    var i = 0
-    while i < input.count {
-        let cur = input.index(input.startIndex, offsetBy: i)
-        
-        if input[cur].isWhitespace {
-            //print(i, input[cur], "Whitespace")
-            i += 1
-            continue
-        } else if input[cur] == "/" && input.getChar(at: i+1) == "/" {
-            while input.getChar(at: i) != "\n" {
-                i += 1
-            }
-            continue
-        } else if input[cur] == "/" && input.getChar(at: i+1) == "*" {
-            while input.substring(from: i, to: i + 2) != "*/" {
-                i += 1
-            }
-            i += 2
-            continue
-        } else if input[cur] == ";" {
-            //print(i, input[cur], "Semicolon")
-            output.append(Token(type: .Semicolon, lexeme: ";"))
-            i += 1
-        } else if input[cur] == "{" {
-            //print(i, input[cur], "OpenBrace")
-            output.append(Token(type: .OpenBrace, lexeme: "{"))
-            i += 1
-        } else if input[cur] == "}" {
-            //print(i, input[cur], "CloseBrace")
-            output.append(Token(type: .CloseBrace, lexeme: "{"))
-            i += 1
-        } else if input[cur] == "(" {
-            //print(i, input[cur], "OParen")
-            output.append(Token(type: .OpenParen, lexeme: "("))
-            i += 1
-        } else if input[cur] == ")" {
-            //print(i, input[cur], "CParen")
-            output.append(Token(type: .CloseParen, lexeme: ")"))
-            i += 1
-        } else if input[cur].isNumber {
-            //print(i, input[cur], "Number start")
-            let start = cur
-            while i < input.count - 1 && ( i == input.count - 1 || input[input.index(input.startIndex, offsetBy: i+1)].isNumber) {
-                i += 1
-            }
-            let value = input[start..<input.index(input.startIndex, offsetBy: i+1)]
-            output.append(Token(type: .Constant, lexeme: String(value)))
-            //print("Got num: \(value)")
-            i += 1
-        } else if input[cur].isLetter {
-            let start = cur
-            while i < input.count - 1 && ( i == input.count - 1 || id_chars.contains(input[input.index(input.startIndex, offsetBy: i+1)])) {
-                i += 1
-            }
-            let value = String(input[start..<input.index(input.startIndex, offsetBy: i+1)])
-
-            
-            switch value {
-            case "int":
-                output.append(Token(type: .KeywordInt, lexeme: value))
-                i += 1
-            case "void":
-                output.append(Token(type: .KeywordInt, lexeme: value))
-                i += 1
-            case "return":
-                output.append(Token(type: .KeywordReturn, lexeme: value))
-                i += 1
-            default:
-                output.append(Token(type: .Identifier, lexeme: value))
-                i += 1
-            }
-        } else {
-            throw LexerError.unidentifiedToken(found: String(input[cur]))
-        }
-    }
-    return output
+    var line: Int
 }
 
 let regexMap = [
@@ -219,11 +144,12 @@ let regexMap = [
 
 func tokenizeRegex(input: String) throws -> [Token] {
     var output: [Token] = []
-    
+    var line = 1
     var i = 0
     while i < input.count {
         let cur = input.index(input.startIndex, offsetBy: i)
         if input[cur].isWhitespace {
+            if input[cur] == "\n" { line += 1}
             i += 1
             continue
         } else if input[cur] == "/" && input.getChar(at: i+1) == "/" {
@@ -233,17 +159,10 @@ func tokenizeRegex(input: String) throws -> [Token] {
             continue
         } else if input[cur] == "/" && input.getChar(at: i+1) == "*" {
             while input.substring(from: i, to: i + 2) != "*/" {
+                if input[cur] == "\n" { line += 1}
                 i += 1
             }
             i += 2
-            continue
-        } else if input[cur] == "+" && input.getChar(at: i + 1) != "="  && input.getChar(at: i+1) != "+" {
-            output.append(Token(type: .Plus, lexeme: "+"))
-            i += 1
-            continue
-        } else if input[cur] == "&" && input.getChar(at: i+1) != "&" && input.getChar(at: i+1) != "="{
-            output.append(Token(type: .BitwiseAnd, lexeme: "&"))
-            i += 1
             continue
         }
         var longest = ""
@@ -262,9 +181,9 @@ func tokenizeRegex(input: String) throws -> [Token] {
             throw LexerError.unidentifiedToken(found: input.substring(from: i, to: input.count))
         }
         if keywords.keys.contains(longest){
-            output.append(Token(type: keywords[longest]!, lexeme: longest))
+            output.append(Token(type: keywords[longest]!, lexeme: longest, line: line))
         } else {
-            output.append(Token(type: longest_type!, lexeme: longest))
+            output.append(Token(type: longest_type!, lexeme: longest, line: line))
         }
         i += longest.count
     }

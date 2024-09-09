@@ -28,13 +28,9 @@ struct ASTProgram: ASTNode {
 
 struct ASTFunction: ASTNode {
     var name: String
-    var body: [ASTBlockItem]
+    var body: ASTBlock
     func toString() -> String {
-        var out = "Function(name=\(name), body=["
-        for line in body {
-            out += line.toString() + ", "
-        }
-        out += "])"
+        let out = "Function(name=\(name), body=\(body.toString()))"
         return out
     }
 }
@@ -72,6 +68,18 @@ protocol ASTStatement: ASTNode {
     
 }
 
+struct ASTBlock: ASTNode {
+    var body: [ASTBlockItem]
+    func toString() -> String {
+        var out = "CompoundStatement(body = ["
+        for it in body {
+            out += it.toString() + ", "
+        }
+        out += "])"
+        return out
+    }
+}
+
 struct ASTReturnStatement: ASTStatement {
     var exp: ASTExpr
     func toString() -> String {
@@ -103,6 +111,13 @@ struct ASTIfStatement: ASTStatement {
             out += ", else=\(els!.toString())"
         }
         return out + ")"
+    }
+}
+
+struct ASTCompoundStatement: ASTStatement {
+    var body: ASTBlock
+    func toString() -> String {
+        return "CompoundStatement(body=\(body.toString()))"
     }
 }
 
@@ -211,6 +226,19 @@ class Parser {
         self.tokens = tokens
     }
 
+    func expectAndConsumeToken(ttype: TokenType) throws {
+        if tokens[current].type != ttype {
+            throw ParsingError.unexpectedToken(found: tokens[current], expected: "\(ttype)")
+        }
+        current += 1
+    }
+    func expectAndDontConsumeToken(ttype: TokenType) throws -> Token {
+        if tokens[current].type != ttype {
+            throw ParsingError.unexpectedToken(found: tokens[current], expected: "\(ttype)")
+        }
+        return tokens[current]
+    }
+
     func parse() throws -> ASTProgram {
         
         let p = ASTProgram(function: try! parseFunction())
@@ -221,52 +249,32 @@ class Parser {
     }
     
     func parseFunction() throws -> ASTFunction {
-        // Expect "int <identifier> ( void ) { <block-items> }
+        // Expect "int <identifier> ( void ) <block>
         var name: String
-        var body: [ASTBlockItem] = []
-        if tokens[current].type == .KeywordInt{
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "int keyword at function start")
-        }
-        if tokens[current].type == .Identifier {
-            name = tokens[current].lexeme
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "Identifier for function name")
-        }
-        if tokens[current].type == .OpenParen {
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "Open paren for function args")
-        }
-        if tokens[current].type == .KeywordVoid {
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "void keyword at function args")
-        }
-        if tokens[current].type == .CloseParen {
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "Close paren for function args")
-        }
-        if tokens[current].type == .OpenBrace {
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "Open brace for func body")
-        }
+        var body: ASTBlock
         
-        while tokens[current].type != .CloseBrace {
-            let next_item = try! parseBlockItem()
-            body.append(next_item)
-        }
+        try! expectAndConsumeToken(ttype: .KeywordInt)
+        name = try!expectAndDontConsumeToken(ttype: .Identifier).lexeme
+        current += 1
+        try! expectAndConsumeToken(ttype: .OpenParen)
+        try! expectAndConsumeToken(ttype: .KeywordVoid)
+        try! expectAndConsumeToken(ttype: .CloseParen)
         
-        if tokens[current].type == .CloseBrace {
-            current += 1
-        } else {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "Close brace to end func body")
-        }
+        body = try! parseBlock()
+        
         return ASTFunction(name: name, body: body)
+    }
+    
+    func parseBlock() throws -> ASTBlock {
+        // "{" {<block-item>} "}"
+        var items: [ASTBlockItem] = []
+        try! expectAndConsumeToken(ttype: .OpenBrace)
+        while tokens[current].type != .CloseBrace {
+            print("Try to parse block item: \(tokens[current].lexeme)")
+            items.append(try! parseBlockItem())
+        }
+        try! expectAndConsumeToken(ttype: .CloseBrace)
+        return ASTBlock(body: items)
     }
     
     func parseBlockItem() throws -> ASTBlockItem {
@@ -278,35 +286,22 @@ class Parser {
         }
     }
     
-    func expectAndConsumeToken(ttype: TokenType) throws {
-        if tokens[current].type != ttype {
-            throw ParsingError.unexpectedToken(found: tokens[current], expected: "\(ttype)")
-        }
-        current += 1
-    }
-    
     func parseStatement() throws -> ASTStatement {
-        // statement = Return(exp) | Expression(exp) | Null | If(exp condition, statement then, statement? else)
+        // statement = Return(exp) | Expression(exp) | Null | If(exp condition, statement then, statement? else) | Compound(block)
         if tokens[current].type == TokenType.KeywordReturn {
             current += 1
             let stmt = ASTReturnStatement(exp: try! parseExpr(precedence: 0))
-            if tokens[current].type == TokenType.Semicolon {
-                current += 1
-                return stmt
-            } else {
-                throw ParsingError.unexpectedToken(found: tokens[current], expected: "Semicolon to end Statement")
-            }
+            try! expectAndConsumeToken(ttype: .Semicolon)
+            return stmt
         } else if tokens[current].type == .Semicolon {
             current += 1
             return ASTNullStatement()
         } else if tokens[current].type == .KeywordIf {
             //“if" "(" <exp> ")" <statement> ["else" <statement>]
             current += 1
-            if tokens[current].type != .OpenParen { throw ParsingError.unexpectedToken(found: tokens[current], expected: "open paren") }
-            current += 1
+            try! expectAndConsumeToken(ttype: .OpenParen)
             let cond = try! parseExpr(precedence: 0)
-            if tokens[current].type != .CloseParen { throw ParsingError.unexpectedToken(found: tokens[current], expected: "close paren") }
-            current += 1
+            try! expectAndConsumeToken(ttype: .CloseParen)
             let stmt = try! parseStatement()
             if tokens[current].type != .KeywordElse {
                 return ASTIfStatement(condition: cond, then: stmt)
@@ -315,6 +310,8 @@ class Parser {
                 let els = try! parseStatement()
                 return ASTIfStatement(condition: cond, then: stmt, els: els)
             }
+        } else if tokens[current].type == .OpenBrace {
+            return ASTCompoundStatement(body: try! parseBlock())
         } else {
             let exp_stmt = ASTExpressionStatement(exp: try! parseExpr(precedence: 0))
             try! expectAndConsumeToken(ttype: .Semicolon)
@@ -352,7 +349,6 @@ class Parser {
     
     func parseExpr(precedence: Int) throws -> ASTExpr {
         // <exp> ::= <factor> | <exp> <binop> <exp>
-        
         var left = try! parseFactor()
         if tokens[current].type == .Increment || tokens[current].type == .Decrement {
             let op = tokens[current].lexeme

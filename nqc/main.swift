@@ -41,7 +41,7 @@ func main() {
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     } else {
-        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_6/valid/if_nested.c"
+        filename = "/Users/ekish/dev/c_comp/writing-a-c-compiler-tests/tests/chapter_7/valid/use_in_inner_scope.c"
         shell("arch -x86_64 gcc -E -P \(filename) -o \(filename.replacingOccurrences(of: ".c", with: ".pc"))")
         program = readFile(path: filename.replacingOccurrences(of: ".c", with: ".pc"))
     }
@@ -52,7 +52,7 @@ func main() {
     let parser = Parser(tokens: reg)
     let ast = try! parser.parse()
     print("========")
-    for ln in ast.function.body {
+    for ln in ast.function.body.body {
         print(ln.toString())
     }
     print("========")
@@ -62,13 +62,13 @@ func main() {
     print("========")
     let tachometer = TACEmitter()
     let tac = tachometer.convertAST(program: validated)
-    print("========")
     for ln in tac.function.body {
         print(ln)
     }
     let asem = emitAssembly(program: tac)
-
-    print(asem.emitCode())
+    for item in asem.function.body {
+        print(item)
+    }
     let final = asem.emitCode()
     let assembly_file = filename.replacingOccurrences(of: ".c", with: ".s")
     let exec_file = filename.replacingOccurrences(of: ".c", with: "")

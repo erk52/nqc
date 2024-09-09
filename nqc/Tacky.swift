@@ -245,32 +245,56 @@ class TACEmitter {
             case is ASTExpressionStatement:
                 let ex = stmt as! ASTExpressionStatement
                 try! emitTacky(exp: ex.exp)
+            case is ASTBlockStatement:
+                let b_stmt = stmt as! ASTBlockStatement
+                convertStatement(b_stmt.statement)
             case is ASTIfStatement:
                 let i_stmt = stmt as! ASTIfStatement
                 let c = try! emitTacky(exp: i_stmt.condition)
                 let endlab = makeLabel(base: "ifend")
-            if i_stmt.els == nil {
-                instructions.append(TACJumpIfZeroInstruction(condition: c, target: endlab))
-                convertStatement(i_stmt.then)
-                instructions.append(TACLabel(identifier: endlab))
-            } else {
-                let else_lab = makeLabel(base: "else")
-                instructions.append(TACJumpIfZeroInstruction(condition: c, target: else_lab))
-                convertStatement(i_stmt.then)
-                instructions.append(TACJumpInstruction(target: endlab))
-                instructions.append(TACLabel(identifier: else_lab))
-                convertStatement(i_stmt.els!)
-                instructions.append(TACLabel(identifier: endlab))
-            }
+                if i_stmt.els == nil {
+                    instructions.append(TACJumpIfZeroInstruction(condition: c, target: endlab))
+                    convertStatement(i_stmt.then)
+                    instructions.append(TACLabel(identifier: endlab))
+                } else {
+                    let else_lab = makeLabel(base: "else")
+                    instructions.append(TACJumpIfZeroInstruction(condition: c, target: else_lab))
+                    convertStatement(i_stmt.then)
+                    instructions.append(TACJumpInstruction(target: endlab))
+                    instructions.append(TACLabel(identifier: else_lab))
+                    convertStatement(i_stmt.els!)
+                    instructions.append(TACLabel(identifier: endlab))
+                }
+            case is ASTCompoundStatement:
+                let cstmt = stmt as! ASTCompoundStatement
+                convertBlock(cstmt.body)
             default:
                 return
             }
         
     }
     
+    func convertBlock(_ block: ASTBlock) {
+        for item in block.body {
+            switch item {
+            case is ASTBlockDeclaration:
+                let dec = item as! ASTBlockDeclaration
+                if dec.declaration.init_val != nil {
+                    let declared = try! emitTacky(exp: dec.declaration.init_val!)
+                    instructions.append(TACCopyInstruction(src: declared, dst: TACVar(identifier: dec.declaration.identifier)))
+                }
+            case is ASTBlockStatement:
+                let block = item as! ASTBlockStatement
+                convertStatement(block.statement)
+            default:
+                continue
+            }
+        }
+    }
+    
     func convertAST(program: ASTProgram) -> TACProgram {
         let ast_fun = program.function
-        let ast_stmts = ast_fun.body
+        let ast_stmts = ast_fun.body.body
         for st in ast_stmts {
             switch st {
             case is ASTBlockDeclaration:
